@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>하락장 추매 기준선 계산기</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --text:#16181d; --sub:#6b7280;
+    --border:#e5e7eb; --accent:#2563eb; --accent2:#1d4ed8;
+    --stage1:#f59e0b; --stage2:#f97316; --stage3:#dc2626; --safe:#10b981;
+    color-scheme: light;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1115; --card:#181b21; --text:#eef0f3; --sub:#9aa1ac;
+      --border:#2a2e37;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1115; --card:#181b21; --text:#eef0f3; --sub:#9aa1ac;
+    --border:#2a2e37;
+    color-scheme: dark;
+  }
+  html{ scroll-padding-top: env(safe-area-inset-top,0px); }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    min-height:100%;
+    display:flex; justify-content:center;
+  }
+  .wrap{ width:100%; max-width:520px; padding:24px 16px 60px; }
+  h1{ font-size:1.3rem; margin:4px 0 2px; }
+  .sub{ color:var(--sub); font-size:0.88rem; margin-bottom:20px; line-height:1.5; }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:18px; margin-bottom:16px;
+  }
+  label{ display:block; font-size:0.82rem; color:var(--sub); margin-bottom:6px; }
+  .row{ display:flex; gap:10px; margin-bottom:14px; }
+  .row > div{ flex:1; }
+  input[type=number], input[type=text], select, button.primary{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:1rem; outline:none;
+    color-scheme: inherit;
+  }
+  input[type=number]{
+    appearance:textfield;
+    -moz-appearance:textfield;
+    padding-right:28px;
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+    display:none;
+  }
+  input[type=number]:hover, input[type=number]:active, input[type=number]:focus,
+  input[type=text]:focus, select:focus{
+    background:var(--bg); color:var(--text); border-color:var(--accent);
+  }
+  .dollar-input .num-steppers{
+    position:absolute; right:5px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; gap:2px; z-index:1;
+  }
+  .num-step{
+    width:20px; height:14px; padding:0; border:none; border-radius:4px;
+    background:var(--card); color:var(--sub); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; line-height:0;
+  }
+  .num-step:hover, .num-step:focus-visible{ background:var(--border); color:var(--text); }
+  .num-step:active{ background:var(--accent); color:#fff; }
+  .num-step svg{ width:8px; height:8px; display:block; }
+  select{ appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--sub) 50%),linear-gradient(135deg,var(--sub) 50%,transparent 50%);
+    background-position:calc(100% - 16px) calc(50% - 3px), calc(100% - 11px) calc(50% - 3px);
+    background-size:5px 5px, 5px 5px; background-repeat:no-repeat; padding-right:28px; }
+  button.primary{
+    background:var(--accent); color:#fff; border:none; font-weight:600; cursor:pointer;
+  }
+  button.primary:hover{ background:var(--accent2); }
+  button.primary:disabled{ opacity:.65; cursor:wait; }
+  .unit-hint{ font-size:0.78rem; color:var(--accent); margin-top:5px; font-weight:600; }
+  .dollar-input{ position:relative; }
+  .dollar-input .dollar-sign{
+    position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    color:var(--sub); font-size:1rem; pointer-events:none;
+  }
+  .dollar-input.has-prefix input[type=number]{ padding-left:26px; }
+  .result-big{ font-size:2rem; font-weight:700; margin:4px 0; }
+  .stage-badge{
+    display:inline-block; padding:5px 12px; border-radius:999px; font-size:0.82rem;
+    font-weight:600; color:#fff; margin-bottom:10px;
+  }
+  .bar-outer{
+    position:relative; height:14px; border-radius:999px; background:var(--border);
+    overflow:visible; margin:22px 0 30px;
+  }
+  .bar-fill{
+    height:100%; border-radius:999px; background:linear-gradient(90deg,var(--safe),var(--stage1),var(--stage2),var(--stage3));
+    width:0%; transition:width .3s ease;
+  }
+  .marker{
+    position:absolute; top:-6px; width:2px; height:26px; background:var(--sub); opacity:.5;
+  }
+  .marker-label{
+    position:absolute; top:18px; font-size:0.68rem; color:var(--sub); white-space:nowrap;
+    transform:translateX(-50%);
+  }
+  .amount-line{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--border); font-size:0.92rem;
+  }
+  .amount-line:last-child{ border-bottom:none; }
+  .amount-line .v{ font-weight:700; }
+  .stage-list{ font-size:0.82rem; color:var(--sub); line-height:1.9; margin-top:8px; }
+  .stage-list b{ color:var(--text); }
+  footer{ text-align:center; color:var(--sub); font-size:0.72rem; margin-top:20px; }
+  .quote-status{ font-size:0.8rem; color:var(--sub); margin-top:8px; line-height:1.45; min-height:1.2em; }
+  .quote-status.error{ color:var(--stage3); }
+  .quote-status.ok{ color:var(--safe); }
+  #customTickerWrap{ display:none; }
+  .chart-box{ position:relative; height:220px; }
+  .chart-empty{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--sub); font-size:0.85rem; text-align:center; padding:12px;
+  }
+  .chart-empty.hidden{ display:none; }
+  .legend-note{ font-size:0.72rem; color:var(--sub); margin-top:10px; line-height:1.4; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📊 하락장 추매 기준선 계산기</h1>
+  <p class="sub">ETF를 고르면 52주 고점·현재가를 채우고, 고점 대비 하락률에 따라 파킹통장에서 얼마를 투입할지 계산합니다.</p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="etf">종목 / ETF</label>
+        <select id="etf">
+          <option value="">종목을 선택하세요</option>
+          <optgroup label="미국 ETF">
+            <option value="SPY">SPY · S&amp;P 500</option>
+            <option value="QQQ">QQQ · 나스닥 100</option>
+            <option value="QQQM">QQQM · 나스닥 100 (저보수)</option>
+            <option value="VOO">VOO · 뱅가드 S&amp;P 500</option>
+            <option value="VTI">VTI · 미국 전체 주식</option>
+            <option value="SCHD">SCHD · 미국 배당</option>
+            <option value="SOXX">SOXX · 반도체</option>
+            <option value="SMH">SMH · 반도체</option>
+            <option value="IWM">IWM · 러셀 2000</option>
+            <option value="DIA">DIA · 다우존스</option>
+            <option value="TLT">TLT · 미국 장기국채</option>
+            <option value="GLD">GLD · 금</option>
+          </optgroup>
+          <optgroup label="한국 ETF (Yahoo 티커)">
+            <option value="069500.KS">069500.KS · KODEX 200</option>
+            <option value="379800.KS">379800.KS · KODEX 미국나스닥100</option>
+            <option value="133690.KS">133690.KS · TIGER 나스닥100</option>
+          </optgroup>
+          <option value="__custom__">직접 입력 (티커)</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" id="customTickerWrap">
+      <div>
+        <label for="customTicker">티커 (예: AAPL, TQQQ, 360750.KS)</label>
+        <input type="text" id="customTicker" placeholder="티커 입력 후 불러오기" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:0;">
+      <div>
+        <button type="button" class="primary" id="loadBtn">시세 · 차트 불러오기</button>
+        <div class="quote-status" id="quoteStatus">종목을 선택하면 Yahoo Finance 시세로 고점가와 현재가를 채웁니다.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="parking">파킹통장 총액 (원)</label>
+        <input type="text" inputmode="numeric" id="parking" value="10,000,000">
+        <div class="unit-hint" id="parkingHint">= 1,000만원</div>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:0;">
+      <div>
+        <label for="high" id="highLabel">고점가 (52주 고점, USD $)</label>
+        <div class="dollar-input has-prefix" id="highWrap">
+          <span class="dollar-sign" id="highPrefix">$</span>
+          <input type="number" id="high" value="500" step="0.01">
+          <div class="num-steppers">
+            <button type="button" class="num-step" data-target="high" data-dir="1" aria-label="고점가 올리기">
+              <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="num-step" data-target="high" data-dir="-1" aria-label="고점가 내리기">
+              <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label for="current" id="currentLabel">현재가 (USD $)</label>
+        <div class="dollar-input has-prefix" id="currentWrap">
+          <span class="dollar-sign" id="currentPrefix">$</span>
+          <input type="number" id="current" value="430" step="0.01">
+          <div class="num-steppers">
+            <button type="button" class="num-step" data-target="current" data-dir="1" aria-label="현재가 올리기">
+              <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="num-step" data-target="current" data-dir="-1" aria-label="현재가 내리기">
+              <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px;">
+      <div style="font-weight:700; font-size:0.95rem;">1년 가격 추이</div>
+      <div class="sub" style="margin:0; font-size:0.75rem;" id="chartCaption">시세를 불러오면 표시됩니다</div>
+    </div>
+    <div class="chart-box">
+      <canvas id="priceChart" aria-label="가격 차트"></canvas>
+      <div class="chart-empty" id="chartEmpty">종목을 불러오면 52주 고점과 -10/-20/-30% 기준선이 함께 표시됩니다.</div>
+    </div>
+    <div class="legend-note">실선은 종가, 점선은 고점 및 추매 기준선입니다. 고점가·현재가를 직접 수정하면 기준선도 같이 바뀝니다.</div>
+  </div>
+
+  <div class="card">
+    <div id="stageBadge" class="stage-badge" style="background:var(--safe);">대기</div>
+    <div class="result-big" id="drawdownText">0.0%</div>
+    <div class="sub" id="stageDesc">고점가와 현재가를 입력하세요.</div>
+
+    <div class="bar-outer">
+      <div class="bar-fill" id="barFill"></div>
+      <div class="marker" style="left:10%"></div>
+      <div class="marker-label" style="left:10%">-10%</div>
+      <div class="marker" style="left:20%"></div>
+      <div class="marker-label" style="left:20%">-20%</div>
+      <div class="marker" style="left:30%"></div>
+      <div class="marker-label" style="left:30%">-30%</div>
+    </div>
+
+    <div class="amount-line">
+      <span>이번 단계 추천 투입액</span>
+      <span class="v" id="recommendAmt">-</span>
+    </div>
+    <div class="amount-line">
+      <span>누적 투입 예상액</span>
+      <span class="v" id="cumulativeAmt">-</span>
+    </div>
+    <div class="amount-line">
+      <span>남은 파킹통장 잔고</span>
+      <span class="v" id="remainAmt">-</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="stage-list">
+      <div><b>1단계 (-10% 내외, 건전한 조정)</b> : 전체 자금의 20% 투입 → 평소 눈여겨본 우량주·지수(ETF) 초기 매수</div>
+      <div><b>2단계 (-20% 내외, 베어마켓 진입)</b> : 추가 30% 투입 → 매력적 가격대의 가치주 비중 확대</div>
+      <div><b>3단계 (-30% 이상, 경기 침체/위기)</b> : 나머지 50% 분할 투입 → 공포 극에 달했을 때 핵심 우량주 집중 매수</div>
+    </div>
+  </div>
+
+  <footer>시세는 Yahoo Finance 공개 차트 데이터를 사용합니다. 입력값은 이 기기에만 저장되며, 투자 조언이 아닌 개인 기준선 계산 도구입니다.</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('ko-KR') + '원';
+const parseNum = str => parseFloat(String(str).replace(/,/g,'')) || 0;
+
+let priceChart = null;
+let series = [];
+let quoteMeta = { currency: 'USD', name: '', symbol: '' };
+
+function cssVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function toKoreanUnit(n){
+  n = Math.round(n);
+  if(n <= 0) return '0원';
+  const eok = Math.floor(n / 100000000);
+  const man = Math.floor((n % 100000000) / 10000);
+  let parts = [];
+  if(eok > 0) parts.push(eok.toLocaleString('ko-KR') + '억');
+  if(man > 0) parts.push(man.toLocaleString('ko-KR') + '만');
+  if(parts.length === 0) parts.push(n.toLocaleString('ko-KR'));
+  return '= ' + parts.join(' ') + '원';
+}
+
+function formatParkingInput(){
+  const raw = parseNum($('parking').value);
+  const el = $('parking');
+  const pos = el.selectionStart;
+  const before = el.value.length;
+  el.value = raw > 0 ? raw.toLocaleString('ko-KR') : '';
+  const after = el.value.length;
+  const newPos = Math.max(0, pos + (after - before));
+  try{ el.setSelectionRange(newPos, newPos); }catch(e){}
+  $('parkingHint').textContent = toKoreanUnit(raw);
+}
+
+function applyCurrency(code){
+  const currency = code || 'USD';
+  quoteMeta.currency = currency;
+  const prefix = currency === 'USD' ? '$' : (currency === 'KRW' ? '₩' : '');
+  ['highPrefix','currentPrefix'].forEach(id => $(id).textContent = prefix);
+  ['highWrap','currentWrap'].forEach(id => $(id).classList.toggle('has-prefix', !!prefix));
+  const unit = currency === 'USD' ? 'USD $' : currency;
+  $('highLabel').textContent = `고점가 (52주 고점, ${unit})`;
+  $('currentLabel').textContent = `현재가 (${unit})`;
+}
+
+function selectedSymbol(){
+  const sel = $('etf').value;
+  if(sel === '__custom__') return ($('customTicker').value || '').trim().toUpperCase();
+  return sel;
+}
+
+function syncCustomTickerVisibility(){
+  $('customTickerWrap').style.display = $('etf').value === '__custom__' ? 'flex' : 'none';
+}
+
+function loadSaved(){
+  try{
+    const saved = JSON.parse(localStorage.getItem('dipCalcInputs') || 'null');
+    if(saved){
+      if(saved.parking!=null) $('parking').value = Number(saved.parking).toLocaleString('ko-KR');
+      if(saved.high!=null) $('high').value = saved.high;
+      if(saved.current!=null) $('current').value = saved.current;
+      if(saved.etf!=null) $('etf').value = saved.etf;
+      if(saved.customTicker!=null) $('customTicker').value = saved.customTicker;
+      if(saved.currency) applyCurrency(saved.currency);
+    }
+  }catch(e){ /* ignore, use defaults */ }
+  $('parkingHint').textContent = toKoreanUnit(parseNum($('parking').value));
+  syncCustomTickerVisibility();
+}
+
+function saveInputs(){
+  try{
+    localStorage.setItem('dipCalcInputs', JSON.stringify({
+      parking: parseNum($('parking').value),
+      high: $('high').value,
+      current: $('current').value,
+      etf: $('etf').value,
+      customTicker: $('customTicker').value,
+      currency: quoteMeta.currency
+    }));
+  }catch(e){ /* storage unavailable, ignore */ }
+}
+
+function yahooChartUrl(symbol){
+  return 'https://query1.finance.yahoo.com/v8/finance/chart/'
+    + encodeURIComponent(symbol)
+    + '?interval=1d&range=1y&includeAdjustedClose=true';
+}
+
+async function fetchJson(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function fetchYahooChart(symbol){
+  const target = yahooChartUrl(symbol);
+  const attempts = [
+    () => fetchJson(target),
+    () => fetchJson('https://corsproxy.io/?' + encodeURIComponent(target)),
+    () => fetchJson('https://api.allorigins.win/raw?url=' + encodeURIComponent(target)),
+    () => fetchJson('https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(target))
+  ];
+  let lastErr = null;
+  for(const run of attempts){
+    try{
+      const data = await run();
+      const err = data?.chart?.error;
+      if(err) throw new Error(err.description || err.code || '시세 오류');
+      const result = data?.chart?.result?.[0];
+      if(!result) throw new Error('시세 데이터가 없습니다');
+      return result;
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('시세를 불러오지 못했습니다');
+}
+
+function parseChart(result){
+  const ts = result.timestamp || [];
+  const quote = result.indicators?.quote?.[0] || {};
+  const closes = quote.close || [];
+  const highs = quote.high || [];
+  const points = [];
+  for(let i = 0; i < ts.length; i++){
+    const close = closes[i];
+    if(close == null) continue;
+    points.push({ t: ts[i] * 1000, close, high: highs[i] ?? close });
+  }
+  const meta = result.meta || {};
+  const current = Number(meta.regularMarketPrice ?? points.at(-1)?.close);
+  const seriesHigh = points.reduce((m, p) => Math.max(m, p.high || 0), 0);
+  const high52 = Math.max(Number(meta.fiftyTwoWeekHigh) || 0, seriesHigh, current || 0);
+  return {
+    points,
+    current,
+    high52,
+    currency: meta.currency || 'USD',
+    symbol: meta.symbol || '',
+    name: meta.shortName || meta.longName || meta.symbol || '',
+    priceHint: Number(meta.priceHint) || 2
+  };
+}
+
+function formatPrice(n, hint){
+  const d = Math.min(Math.max(hint || 2, 0), 4);
+  return Number(n).toFixed(d);
+}
+
+function fmtChartDate(ms){
+  const d = new Date(ms);
+  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function renderChart(){
+  if(!series.length || typeof Chart === 'undefined'){
+    $('chartEmpty').classList.remove('hidden');
+    if(priceChart){ priceChart.destroy(); priceChart = null; }
+    return;
+  }
+  $('chartEmpty').classList.add('hidden');
+  const high = parseFloat($('high').value) || 0;
+  const text = cssVar('--text') || '#16181d';
+  const sub = cssVar('--sub') || '#6b7280';
+  const border = cssVar('--border') || '#e5e7eb';
+  const labels = series.map(p => p.t);
+  const line = (label, value, color, dash) => ({
+    label,
+    data: series.map(() => value),
+    borderColor: color,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderDash: dash,
+    pointRadius: 0,
+    tension: 0
+  });
+  const datasets = [
+    {
+      label: '종가',
+      data: series.map(p => p.close),
+      borderColor: cssVar('--accent') || '#2563eb',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.15
+    }
+  ];
+  if(high > 0){
+    datasets.push(line('52주 고점', high, sub, [2, 3]));
+    datasets.push(line('-10%', high * 0.9, cssVar('--stage1') || '#f59e0b', [6, 4]));
+    datasets.push(line('-20%', high * 0.8, cssVar('--stage2') || '#f97316', [6, 4]));
+    datasets.push(line('-30%', high * 0.7, cssVar('--stage3') || '#dc2626', [6, 4]));
+  }
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        labels: { color: sub, boxWidth: 12, font: { size: 10 } }
+      },
+      tooltip: {
+        callbacks: {
+          title: items => {
+            const i = items[0]?.dataIndex ?? 0;
+            const d = new Date(series[i].t);
+            return d.toLocaleDateString('ko-KR');
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: sub,
+          maxTicksLimit: 6,
+          callback(value){
+            const i = Number(value);
+            return series[i] ? fmtChartDate(series[i].t) : '';
+          }
+        },
+        grid: { color: border }
+      },
+      y: {
+        ticks: { color: sub },
+        grid: { color: border }
+      }
+    }
+  };
+  if(priceChart){
+    priceChart.data.labels = labels;
+    priceChart.data.datasets = datasets;
+    priceChart.options = options;
+    priceChart.update('none');
+    return;
+  }
+  priceChart = new Chart($('priceChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options
+  });
+}
+
+function setStatus(text, kind){
+  const el = $('quoteStatus');
+  el.textContent = text;
+  el.className = 'quote-status' + (kind ? ' ' + kind : '');
+}
+
+async function loadQuote(){
+  const symbol = selectedSymbol();
+  if(!symbol){
+    setStatus('종목을 선택하거나 티커를 입력하세요.', 'error');
+    return;
+  }
+  const btn = $('loadBtn');
+  btn.disabled = true;
+  setStatus(symbol + ' 시세를 불러오는 중…');
+  try{
+    const parsed = parseChart(await fetchYahooChart(symbol));
+    if(!parsed.points.length || !parsed.current){
+      throw new Error('가격 데이터가 비어 있습니다');
+    }
+    series = parsed.points;
+    quoteMeta = { currency: parsed.currency, name: parsed.name, symbol: parsed.symbol };
+    applyCurrency(parsed.currency);
+    $('high').value = formatPrice(parsed.high52, parsed.priceHint);
+    $('current').value = formatPrice(parsed.current, parsed.priceHint);
+    const asOf = new Date(series.at(-1).t).toLocaleDateString('ko-KR');
+    $('chartCaption').textContent = `${parsed.symbol} · ${asOf} 기준`;
+    setStatus(`${parsed.name} (${parsed.symbol}) · 52주 고점 ${$('high').value} / 현재가 ${$('current').value}`, 'ok');
+    compute();
+    renderChart();
+  }catch(e){
+    setStatus(
+      '시세를 불러오지 못했습니다. 티커를 확인하거나 잠시 후 다시 시도하세요. 고점가·현재가는 직접 입력할 수 있습니다. '
+      + (e && e.message ? '(' + e.message + ')' : ''),
+      'error'
+    );
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function compute(){
+  const parking = parseNum($('parking').value);
+  const high = parseFloat($('high').value) || 0;
+  const current = parseFloat($('current').value) || 0;
+
+  let drawdown = 0;
+  if(high > 0){
+    drawdown = Math.max(0, (high - current) / high * 100);
+  }
+
+  $('drawdownText').textContent = '-' + drawdown.toFixed(1) + '%';
+  $('barFill').style.width = Math.min(drawdown, 40) / 40 * 100 + '%';
+
+  let stageName, color, desc, recommendPct, cumulativePct;
+
+  if(drawdown < 10){
+    stageName = '대기 구간';
+    color = 'var(--safe)';
+    desc = '아직 조정 기준(-10%)에 도달하지 않았습니다. 관망 구간입니다.';
+    recommendPct = 0; cumulativePct = 0;
+  } else if(drawdown < 20){
+    stageName = '1단계 · 건전한 조정';
+    color = 'var(--stage1)';
+    desc = '-10% 내외 조정 구간. 전체 자금의 20%로 평소 눈여겨본 우량주나 시장 지수(ETF)를 초기 매수하는 타이밍입니다.';
+    recommendPct = 0.2; cumulativePct = 0.2;
+  } else if(drawdown < 30){
+    stageName = '2단계 · 베어마켓 진입';
+    color = 'var(--stage2)';
+    desc = '-20% 내외, 공식 약세장 진입 구간. 추가 30%를 투입해 매력적인 가격대에 들어온 가치주 비중을 확대하는 타이밍입니다.';
+    recommendPct = 0.3; cumulativePct = 0.5;
+  } else {
+    stageName = '3단계 · 경기 침체/위기';
+    color = 'var(--stage3)';
+    desc = '-30% 이상 폭락 구간. 시장의 공포가 극에 달했을 때로, 나머지 50%를 분할 투입해 핵심 우량주를 집중 매수하는 시기로 봅니다.';
+    recommendPct = 0.5; cumulativePct = 1.0;
+  }
+
+  $('stageBadge').textContent = stageName;
+  $('stageBadge').style.background = color;
+  $('stageDesc').textContent = desc;
+  $('recommendAmt').textContent = drawdown < 10 ? '0원 (대기)' : fmt(parking * recommendPct);
+  $('cumulativeAmt').textContent = fmt(parking * cumulativePct);
+  $('remainAmt').textContent = fmt(parking * (1 - cumulativePct));
+
+  saveInputs();
+  if(series.length) renderChart();
+}
+
+$('parking').addEventListener('input', () => { formatParkingInput(); compute(); });
+['high','current'].forEach(id => $(id).addEventListener('input', compute));
+document.querySelectorAll('.num-step').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const el = $(btn.dataset.target);
+    if(!el) return;
+    if(btn.dataset.dir === '1') el.stepUp();
+    else el.stepDown();
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+});
+$('etf').addEventListener('change', () => {
+  syncCustomTickerVisibility();
+  saveInputs();
+  if($('etf').value && $('etf').value !== '__custom__') loadQuote();
+});
+$('loadBtn').addEventListener('click', loadQuote);
+$('customTicker').addEventListener('keydown', e => {
+  if(e.key === 'Enter') loadQuote();
+});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if(series.length) renderChart();
+});
+
+loadSaved();
+compute();
+if($('etf').value && $('etf').value !== '__custom__'){
+  loadQuote();
+}else if($('etf').value === '__custom__' && $('customTicker').value.trim()){
+  loadQuote();
+}
+</script>
+</body>
+</html>
